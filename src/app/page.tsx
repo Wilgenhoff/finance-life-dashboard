@@ -65,8 +65,6 @@ const initialHabits: LocalHabit[] = [
   { name: "Meditación", color: "#eab308", week: [false, false, false, false, false, false, false] },
 ];
 
-const categories = ["Ingreso", "Hogar", "Comida", "Transporte", "Salud", "Educación", "Inversión", "Ocio"];
-
 function getInitialForm(): TransactionForm {
   return {
     title: "",
@@ -136,6 +134,9 @@ export default function DashboardPage() {
   const [monthlyGoal, setMonthlyGoal] = useState(3000);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [editGoalValue, setEditGoalValue] = useState("3000");
+  const [categories, setCategories] = useState(["Ingreso", "Hogar", "Comida", "Transporte", "Salud", "Educación", "Inversión", "Ocio"]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -915,17 +916,96 @@ export default function DashboardPage() {
 
               <label className="block">
                 <span className="text-sm font-medium text-foreground">Categoría</span>
-                <select
-                  value={form.category}
-                  onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-emerald-500"
-                >
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-2 flex items-center gap-2">
+                  {isAddingCategory ? (
+                    <div className="flex h-11 flex-1 items-center gap-2 rounded-md border border-border bg-background px-3">
+                      <input
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newCategoryName.trim()) {
+                            const trimmed = newCategoryName.trim();
+                            if (!categories.includes(trimmed)) {
+                              setCategories((prev) => [...prev, trimmed]);
+                              setForm((current) => ({ ...current, category: trimmed }));
+                            }
+                            setNewCategoryName("");
+                            setIsAddingCategory(false);
+                          }
+                          if (e.key === "Escape") {
+                            setNewCategoryName("");
+                            setIsAddingCategory(false);
+                          }
+                        }}
+                        placeholder="Nombre de la categoría"
+                        className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-subtle"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = newCategoryName.trim();
+                          if (trimmed && !categories.includes(trimmed)) {
+                            setCategories((prev) => [...prev, trimmed]);
+                            setForm((current) => ({ ...current, category: trimmed }));
+                          }
+                          setNewCategoryName("");
+                          setIsAddingCategory(false);
+                        }}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-emerald-400 transition hover:bg-emerald-500/10"
+                        aria-label="Guardar categoría"
+                      >
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewCategoryName("");
+                          setIsAddingCategory(false);
+                        }}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+                        aria-label="Cancelar"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={form.category}
+                        onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                        className="h-11 flex-1 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-emerald-500"
+                      >
+                        {categories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingCategory(true)}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border bg-background text-subtle transition hover:bg-muted hover:text-foreground"
+                        aria-label="Agregar categoría"
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (categories.length <= 1) return;
+                          setCategories((prev) => prev.filter((c) => c !== form.category));
+                          setForm((current) => ({ ...current, category: categories.find((c) => c !== form.category) ?? categories[0] }));
+                        }}
+                        disabled={categories.length <= 1}
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border bg-background text-subtle transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
+                        aria-label="Eliminar categoría"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </label>
 
               <div>
