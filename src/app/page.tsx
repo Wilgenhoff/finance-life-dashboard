@@ -131,7 +131,13 @@ export default function DashboardPage() {
   const [arsRate, setArsRate] = useState<number>(1200);
   const [newHabitName, setNewHabitName] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [monthlyGoal, setMonthlyGoal] = useState(3000);
+  const [monthlyGoal, setMonthlyGoal] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("monthlyGoal");
+      return saved ? Number(saved) : 3000;
+    }
+    return 3000;
+  });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [editGoalValue, setEditGoalValue] = useState("3000");
   const [categories, setCategories] = useState(["Ingreso", "Hogar", "Comida", "Transporte", "Salud", "Educación", "Inversión", "Ocio"]);
@@ -217,6 +223,10 @@ export default function DashboardPage() {
       ARS: 1 / (arsRate > 0 ? arsRate : 1200),
     }));
   }, [arsRate]);
+
+  useEffect(() => {
+    localStorage.setItem("monthlyGoal", String(monthlyGoal));
+  }, [monthlyGoal]);
 
   const financialSummary = useMemo(() => {
     const today = new Date();
