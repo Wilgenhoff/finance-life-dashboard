@@ -128,6 +128,7 @@ export default function DashboardPage() {
   const [newAssetForm, setNewAssetForm] = useState<NewAssetForm>({ symbol: "", name: "", quantity: "" });
   const [arsRate, setArsRate] = useState<number>(1200);
   const [newHabitName, setNewHabitName] = useState("");
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -486,7 +487,7 @@ export default function DashboardPage() {
               <h2 className="text-base font-semibold">Movimientos recientes</h2>
               <p className="mt-1 text-sm text-subtle">Ingresos y egresos del mes actual</p>
             </div>
-            <button className="text-sm font-medium text-emerald-400 transition hover:text-emerald-300">
+            <button onClick={() => setIsHistoryOpen(true)} className="text-sm font-medium text-emerald-400 transition hover:text-emerald-300">
               Ver todo
             </button>
           </div>
@@ -1022,6 +1023,93 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isHistoryOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-6 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-title"
+            className="w-full max-w-2xl rounded-md border border-border bg-surface shadow-soft"
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-5">
+              <div>
+                <h2 id="history-title" className="text-lg font-semibold">Historial de movimientos</h2>
+                <p className="mt-1 text-sm text-subtle">{transactions.length} movimientos registrados</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(false)}
+                className="grid h-9 w-9 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Cerrar</span>
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto divide-y divide-border">
+              {transactions.length === 0 ? (
+                <div className="px-6 py-10 text-center text-sm text-subtle">No hay movimientos registrados.</div>
+              ) : (
+                transactions.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="grid grid-cols-[1fr_130px_120px_44px] items-center gap-2 px-6 py-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "grid h-9 w-9 place-items-center rounded-md",
+                          transaction.type === "income"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-red-500/10 text-red-400"
+                        )}
+                      >
+                        {transaction.type === "income" ? (
+                          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                        ) : (
+                          <ArrowDownRight className="h-4 w-4" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{transaction.title}</p>
+                        <p className="mt-1 text-xs text-subtle">{transaction.category}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-subtle">{transaction.date}</p>
+                    <p
+                      className={cn(
+                        "text-right text-sm font-semibold",
+                        transaction.amount > 0 ? "text-emerald-400" : "text-foreground"
+                      )}
+                    >
+                      {formatCurrency(transaction.amount)}
+                    </p>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                        className="grid h-8 w-8 place-items-center rounded-md text-subtle transition hover:bg-red-500/10 hover:text-red-500"
+                        aria-label={`Eliminar transacción ${transaction.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex justify-end border-t border-border px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(false)}
+                className="h-10 rounded-md px-4 text-sm font-medium text-subtle transition hover:bg-muted hover:text-foreground"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
