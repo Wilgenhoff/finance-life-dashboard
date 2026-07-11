@@ -474,7 +474,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <section className="grid grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
           <article key={card.label} className="rounded-md border border-border bg-surface p-5 shadow-soft">
             <div className="flex items-start justify-between">
@@ -502,6 +502,82 @@ export default function DashboardPage() {
             </p>
           </article>
         ))}
+        <article className="rounded-md border border-border bg-surface p-5 shadow-soft">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-subtle">Meta mensual</p>
+              {isEditingGoal ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={editGoalValue}
+                    onChange={(e) => setEditGoalValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        setMonthlyGoal(Number(editGoalValue));
+                        setIsEditingGoal(false);
+                      }
+                    }}
+                    className="h-8 w-28 rounded-md border border-border bg-background px-2 text-2xl font-semibold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMonthlyGoal(Number(editGoalValue));
+                      setIsEditingGoal(false);
+                    }}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-emerald-400 transition hover:bg-emerald-500/10"
+                    aria-label="Confirmar meta"
+                  >
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingGoal(false)}
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+                    aria-label="Cancelar edición"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-3 text-2xl font-semibold truncate">{formatMoney(monthlyGoal)}</p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-start gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditGoalValue(String(monthlyGoal));
+                  setIsEditingGoal(true);
+                }}
+                className="mt-1 grid h-8 w-8 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+                aria-label="Editar meta mensual"
+              >
+                <Edit className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <div className="grid h-9 w-9 place-items-center rounded-md bg-emerald-500/10 text-emerald-400">
+                <TrendingUp className="h-4 w-4" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="text-subtle">Progreso</span>
+              <span className="font-medium text-emerald-400">{Math.round(financialSummary.goalProgress)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-emerald-500 transition-all"
+                style={{ width: `${Math.min(Math.max(financialSummary.goalProgress, 0), 100)}%` }}
+              />
+            </div>
+          </div>
+          <p className={cn("mt-5 text-sm font-medium", financialSummary.netSavings >= 0 ? "text-emerald-400" : "text-red-400")}>
+            Ahorro neto: {formatMoney(financialSummary.netSavings)}
+          </p>
+        </article>
       </section>
 
       <section className="grid grid-cols-[1.15fr_0.85fr] gap-4">
@@ -710,76 +786,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </div>
-        <div className="rounded-md border border-border bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-subtle">Meta mensual</p>
-            <button
-              type="button"
-              onClick={() => {
-                setEditGoalValue(String(monthlyGoal));
-                setIsEditingGoal(true);
-              }}
-              className="grid h-7 w-7 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
-              aria-label="Editar meta mensual"
-            >
-              <Edit className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="mt-3 flex items-end justify-between">
-            {isEditingGoal ? (
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold">$</span>
-                <input
-                  type="number"
-                  value={editGoalValue}
-                  onChange={(e) => setEditGoalValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setMonthlyGoal(Number(editGoalValue));
-                      setIsEditingGoal(false);
-                    }
-                  }}
-                  className="h-8 w-28 rounded-md border border-border bg-background px-2 text-lg font-semibold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMonthlyGoal(Number(editGoalValue));
-                    setIsEditingGoal(false);
-                  }}
-                  className="grid h-7 w-7 place-items-center rounded-md text-emerald-400 transition hover:bg-emerald-500/10"
-                  aria-label="Confirmar meta"
-                >
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingGoal(false)}
-                  className="grid h-7 w-7 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
-                  aria-label="Cancelar edición"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ) : (
-              <p className="text-lg font-semibold">{formatMoney(monthlyGoal)}</p>
-            )}
-            <p className="text-sm font-medium text-emerald-400">{Math.round(financialSummary.goalProgress)}%</p>
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-muted">
-            <div
-              className="h-2 rounded-full bg-emerald-500 transition-all"
-              style={{ width: `${Math.min(Math.max(financialSummary.goalProgress, 0), 100)}%` }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-subtle">
-            Ahorro neto del mes:{" "}
-            <span className={cn("font-medium", financialSummary.netSavings >= 0 ? "text-emerald-400" : "text-red-400")}>
-              {formatMoney(financialSummary.netSavings)}
-            </span>
-          </p>
         </div>
         </div>
 
