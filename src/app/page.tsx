@@ -30,6 +30,8 @@ import type { DashboardHabit } from "@/actions/habits";
 import {
   listAssets as fetchAssets,
   updateAssetQuantity,
+  createAsset,
+  deleteAsset,
 } from "@/actions/assets";
 import type { DashboardAsset } from "@/actions/assets";
 
@@ -43,6 +45,12 @@ type TransactionForm = {
 };
 
 type AssetForm = {
+  quantity: string;
+};
+
+type NewAssetForm = {
+  symbol: string;
+  name: string;
   quantity: string;
 };
 
@@ -108,6 +116,8 @@ export default function DashboardPage() {
   const [assetPrices, setAssetPrices] = useState<AssetPriceMap>(DEFAULT_ASSET_PRICES);
   const [editingAsset, setEditingAsset] = useState<DashboardAsset | null>(null);
   const [assetForm, setAssetForm] = useState<AssetForm>({ quantity: "" });
+  const [isNewAssetOpen, setIsNewAssetOpen] = useState(false);
+  const [newAssetForm, setNewAssetForm] = useState<NewAssetForm>({ symbol: "", name: "", quantity: "" });
 
   useEffect(() => {
     setIsMounted(true);
@@ -308,6 +318,49 @@ export default function DashboardPage() {
     closeAssetEditor();
   }
 
+  function openNewAsset() {
+    setNewAssetForm({ symbol: "", name: "", quantity: "" });
+    setIsNewAssetOpen(true);
+  }
+
+  function closeNewAsset() {
+    setIsNewAssetOpen(false);
+    setNewAssetForm({ symbol: "", name: "", quantity: "" });
+  }
+
+  async function handleNewAssetSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!newAssetForm.symbol.trim() || !newAssetForm.name.trim()) return;
+
+    try {
+      await createAsset({
+        symbol: newAssetForm.symbol.trim(),
+        name: newAssetForm.name.trim(),
+        quantity: newAssetForm.quantity.trim() || "0",
+      });
+      const assts = await fetchAssets();
+      setAssets(assts);
+    } catch {
+      // silent fail
+    }
+
+    closeNewAsset();
+  }
+
+  async function handleDeleteAsset(symbol: string) {
+    const previous = assets;
+    setAssets((current) => current.filter((a) => a.symbol !== symbol));
+
+    try {
+      await deleteAsset(symbol);
+      const assts = await fetchAssets();
+      setAssets(assts);
+    } catch {
+      setAssets(previous);
+    }
+  }
+
   async function handleToggleHabit(name: string, dayIndex: number) {
     const today = new Date();
     const monday = new Date(today);
@@ -463,7 +516,17 @@ export default function DashboardPage() {
               <h2 className="text-base font-semibold">Activos manuales</h2>
               <p className="mt-1 text-sm text-subtle">Balances cargados por el usuario</p>
             </div>
-            <div className="text-sm font-medium text-sky-400">{formatMoney(financialSummary.investmentValue)}</div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-sky-400">{formatMoney(financialSummary.investmentValue)}</span>
+              <button
+                type="button"
+                onClick={openNewAsset}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-subtle transition hover:bg-muted hover:text-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Nuevo
+              </button>
+            </div>
           </div>
           <div className="space-y-4 p-5">
             {assets.length === 0 ? (
@@ -508,6 +571,14 @@ export default function DashboardPage() {
                       aria-label={`Editar activo ${asset.name}`}
                     >
                       <Edit className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAsset(asset.symbol)}
+                      className="grid h-8 w-8 place-items-center rounded-md text-subtle opacity-0 transition hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
+                      aria-label={`Eliminar activo ${asset.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -803,6 +874,87 @@ export default function DashboardPage() {
                 >
                   <Edit className="h-4 w-4" aria-hidden="true" />
                   Guardar balance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isNewAssetOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-asset-title"
+            className="w-full max-w-md rounded-md border border-border bg-surface shadow-soft"
+          >
+            <div className="flex items-center justify-between border-b border-border px-6 py-5">
+              <div>
+                <h2 id="new-asset-title" className="text-lg font-semibold">Nuevo activo</h2>
+                <p className="mt-1 text-sm text-subtle">Agrega un activo manual para trackear.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeNewAsset}
+                className="grid h-9 w-9 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Cerrar</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleNewAssetSubmit} className="space-y-5 p-6">
+              <label className="block">
+                <span className="text-sm font-medium text-foreground">Símbolo</span>
+                <input
+                  value={newAssetForm.symbol}
+                  onChange={(event) =>
+                    setNewAssetForm((current) => ({ ...current, symbol: event.target.value }))
+                  }
+                  placeholder="Ej: BTC, ETH, AAPL"
+                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-subtle focus:border-sky-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-foreground">Nombre</span>
+                <input
+                  value={newAssetForm.name}
+                  onChange={(event) =>
+                    setNewAssetForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  placeholder="Ej: Bitcoin, Ethereum, Apple"
+                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-subtle focus:border-sky-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-foreground">Cantidad / balance</span>
+                <input
+                  value={newAssetForm.quantity}
+                  onChange={(event) =>
+                    setNewAssetForm((current) => ({ ...current, quantity: event.target.value }))
+                  }
+                  placeholder="Ej: 0.1425"
+                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-subtle focus:border-sky-500"
+                />
+              </label>
+
+              <div className="flex items-center justify-end gap-3 border-t border-border pt-5">
+                <button
+                  type="button"
+                  onClick={closeNewAsset}
+                  className="h-10 rounded-md px-4 text-sm font-medium text-subtle transition hover:bg-muted hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center gap-2 rounded-md bg-sky-500 px-4 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Crear activo
                 </button>
               </div>
             </form>

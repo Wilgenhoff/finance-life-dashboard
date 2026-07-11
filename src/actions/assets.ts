@@ -54,3 +54,41 @@ export async function updateAssetQuantity(symbol: string, quantity: string): Pro
 
   revalidatePath("/");
 }
+
+export async function createAsset(data: {
+  symbol: string;
+  name: string;
+  quantity: string;
+}): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const parsedQty = Number(data.quantity.replace(/,/g, ""));
+  if (!Number.isFinite(parsedQty) || parsedQty < 0) return;
+
+  await supabase.from("asset_balances").insert({
+    user_id: user.id,
+    symbol: data.symbol.toUpperCase(),
+    name: data.name.trim(),
+    quantity: parsedQty,
+    unit_price: 0,
+    currency: "USD",
+  });
+
+  revalidatePath("/");
+}
+
+export async function deleteAsset(symbol: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  await supabase
+    .from("asset_balances")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("symbol", symbol);
+
+  revalidatePath("/");
+}
