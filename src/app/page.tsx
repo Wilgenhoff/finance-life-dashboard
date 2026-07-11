@@ -246,10 +246,14 @@ export default function DashboardPage() {
     };
   }, [assetPrices, assets, transactions]);
 
-  const totalCompletedDays = useMemo(
-    () => habits.reduce((sum, h) => sum + h.week.filter((d) => d).length, 0),
-    [habits]
-  );
+  const totalCompletedDays = useMemo(() => {
+    if (habits.length === 0) return 0;
+    let completeDays = 0;
+    for (let day = 0; day < 7; day++) {
+      if (habits.every((h) => h.week[day])) completeDays++;
+    }
+    return completeDays;
+  }, [habits]);
 
   const summaryCards = useMemo(
     () => [
