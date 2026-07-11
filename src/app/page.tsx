@@ -71,45 +71,6 @@ const DEFAULT_ASSET_PRICES: AssetPriceMap = {
   ARS: 1 / 1200,
 };
 
-const LOCAL_ASSETS_KEY = "life-ledger-asset-quantities";
-const LOCAL_ARS_RATE_KEY = "life-ledger-ars-rate";
-
-function loadLocalQuantities(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(LOCAL_ASSETS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveLocalQuantities(quantities: Record<string, string>) {
-  try {
-    localStorage.setItem(LOCAL_ASSETS_KEY, JSON.stringify(quantities));
-  } catch {
-    // storage full or unavailable
-  }
-}
-
-function loadLocalArsRate(): number {
-  if (typeof window === "undefined") return 1200;
-  try {
-    const raw = localStorage.getItem(LOCAL_ARS_RATE_KEY);
-    return raw ? Number(raw) : 1200;
-  } catch {
-    return 1200;
-  }
-}
-
-function saveLocalArsRate(rate: number) {
-  try {
-    localStorage.setItem(LOCAL_ARS_RATE_KEY, String(rate));
-  } catch {
-    // storage full or unavailable
-  }
-}
-
 function formatCurrency(value: number) {
   const sign = value < 0 ? "-" : "+";
   return `${sign}$${Math.abs(value).toLocaleString("en-US", {
@@ -161,7 +122,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setArsRate(loadLocalArsRate());
   }, []);
 
   const loadData = useCallback(async () => {
@@ -173,17 +133,7 @@ export default function DashboardPage() {
       ]);
       setTransactions(txns);
       setHabits(habs);
-
-      const localQty = loadLocalQuantities();
-      if (Object.keys(localQty).length > 0) {
-        const merged = assts.map((a) => ({
-          ...a,
-          quantity: localQty[a.symbol] ?? a.quantity,
-        }));
-        setAssets(merged);
-      } else {
-        setAssets(assts);
-      }
+      setAssets(assts);
     } catch {
       setTransactions([]);
       setHabits([]);
@@ -232,7 +182,6 @@ export default function DashboardPage() {
           const liveArsRate = Number(arsData.rates?.ARS) || 0;
           if (liveArsRate > 0) {
             setArsRate(liveArsRate);
-            saveLocalArsRate(liveArsRate);
           }
         }
       } catch {
@@ -378,20 +327,12 @@ export default function DashboardPage() {
     const parsedQuantity = parseQuantity(rawQty);
     if (!rawQty || Number.isNaN(parsedQuantity) || parsedQuantity < 0) return;
 
-    const localQty = loadLocalQuantities();
-    localQty[editingAsset.symbol] = rawQty;
-    saveLocalQuantities(localQty);
-
-    setAssets((current) =>
-      current.map((a) =>
-        a.symbol === editingAsset.symbol ? { ...a, quantity: rawQty } : a
-      )
-    );
-
     try {
       await updateAssetQuantity(editingAsset.symbol, rawQty);
+      const assts = await fetchAssets();
+      setAssets(assts);
     } catch {
-      // silent fail - local is saved
+      // silent fail
     }
 
     closeAssetEditor();
@@ -416,23 +357,12 @@ export default function DashboardPage() {
 
     const rawQty = newAssetForm.quantity.trim() || "0";
 
-    const localQty = loadLocalQuantities();
-    localQty[symbol] = rawQty;
-    saveLocalQuantities(localQty);
-
-    const newAsset: DashboardAsset = {
-      symbol,
-      name,
-      quantity: rawQty,
-      value: "$0.00",
-      change: "0.0%",
-    };
-    setAssets((current) => [...current, newAsset]);
-
     try {
       await createAsset({ symbol, name, quantity: rawQty });
+      const assts = await fetchAssets();
+      setAssets(assts);
     } catch {
-      // silent fail - local is saved
+      // silent fail
     }
 
     closeNewAsset();
@@ -442,12 +372,10 @@ export default function DashboardPage() {
     const previous = assets;
     setAssets((current) => current.filter((a) => a.symbol !== symbol));
 
-    const localQty = loadLocalQuantities();
-    delete localQty[symbol];
-    saveLocalQuantities(localQty);
-
     try {
       await deleteAsset(symbol);
+      const assts = await fetchAssets();
+      setAssets(assts);
     } catch {
       setAssets(previous);
     }
@@ -619,10 +547,7 @@ export default function DashboardPage() {
                   value={arsRate}
                   onChange={(e) => {
                     const v = Number(e.target.value);
-                    if (v > 0) {
-                      setArsRate(v);
-                      saveLocalArsRate(v);
-                    }
+                    if (v > 0) setArsRate(v);
                   }}
                   className="w-14 bg-transparent text-xs text-foreground outline-none"
                 />
