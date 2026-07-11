@@ -71,6 +71,45 @@ const DEFAULT_ASSET_PRICES: AssetPriceMap = {
   ARS: 1 / 1200,
 };
 
+const LOCAL_ASSETS_KEY = "life-ledger-asset-quantities";
+const LOCAL_ARS_RATE_KEY = "life-ledger-ars-rate";
+
+function loadLocalQuantities(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(LOCAL_ASSETS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalQuantities(quantities: Record<string, string>) {
+  try {
+    localStorage.setItem(LOCAL_ASSETS_KEY, JSON.stringify(quantities));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
+function loadLocalArsRate(): number {
+  if (typeof window === "undefined") return 1200;
+  try {
+    const raw = localStorage.getItem(LOCAL_ARS_RATE_KEY);
+    return raw ? Number(raw) : 1200;
+  } catch {
+    return 1200;
+  }
+}
+
+function saveLocalArsRate(rate: number) {
+  try {
+    localStorage.setItem(LOCAL_ARS_RATE_KEY, String(rate));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
 function formatCurrency(value: number) {
   const sign = value < 0 ? "-" : "+";
   return `${sign}$${Math.abs(value).toLocaleString("en-US", {
@@ -118,9 +157,11 @@ export default function DashboardPage() {
   const [assetForm, setAssetForm] = useState<AssetForm>({ quantity: "" });
   const [isNewAssetOpen, setIsNewAssetOpen] = useState(false);
   const [newAssetForm, setNewAssetForm] = useState<NewAssetForm>({ symbol: "", name: "", quantity: "" });
+  const [arsRate, setArsRate] = useState<number>(1200);
 
   useEffect(() => {
     setIsMounted(true);
+    setArsRate(loadLocalArsRate());
   }, []);
 
   const loadData = useCallback(async () => {
@@ -132,7 +173,17 @@ export default function DashboardPage() {
       ]);
       setTransactions(txns);
       setHabits(habs);
-      setAssets(assts);
+
+      const localQty = loadLocalQuantities();
+      if (Object.keys(localQty).length > 0) {
+        const merged = assts.map((a) => ({
+          ...a,
+          quantity: localQty[a.symbol] ?? a.quantity,
+        }));
+        setAssets(merged);
+      } else {
+        setAssets(assts);
+      }
     } catch {
       setTransactions([]);
       setHabits([]);
@@ -154,26 +205,38 @@ export default function DashboardPage() {
 
     async function fetchAssetPrices() {
       try {
-        const response = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,tether&vs_currencies=usd",
-          { cache: "no-store" }
-        );
+        const [cryptoRes, arsRes] = await Promise.all([
+          fetch(
+            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,tether&vs_currencies=usd",
+            { cache: "no-store" }
+          ),
+          fetch(
+            "https://api.exchangerate-api.com/v4/latest/USD",
+            { cache: "no-store" }
+          ),
+        ]);
 
-        if (!response.ok) return;
-
-        const prices = await response.json();
         if (!isActive) return;
 
-        setAssetPrices((current) => ({
-          ...current,
-          BTC: Number(prices.bitcoin?.usd) || current.BTC,
-          USDT: Number(prices.tether?.usd) || current.USDT,
-          ARS: DEFAULT_ASSET_PRICES.ARS,
-        }));
-      } catch {
-        if (isActive) {
-          setAssetPrices(DEFAULT_ASSET_PRICES);
+        if (cryptoRes.ok) {
+          const prices = await cryptoRes.json();
+          setAssetPrices((current) => ({
+            ...current,
+            BTC: Number(prices.bitcoin?.usd) || current.BTC,
+            USDT: Number(prices.tether?.usd) || current.USDT,
+          }));
         }
+
+        if (arsRes.ok) {
+          const arsData = await arsRes.json();
+          const liveArsRate = Number(arsData.rates?.ARS) || 0;
+          if (liveArsRate > 0) {
+            setArsRate(liveArsRate);
+            saveLocalArsRate(liveArsRate);
+          }
+        }
+      } catch {
+        // keep defaults if API fails
       }
     }
 
@@ -183,6 +246,13 @@ export default function DashboardPage() {
       isActive = false;
     };
   }, [isMounted]);
+
+  useEffect(() => {
+    setAssetPrices((current) => ({
+      ...current,
+      ARS: 1 / (arsRate > 0 ? arsRate : 1200),
+    }));
+  }, [arsRate]);
 
   const financialSummary = useMemo(() => {
     const today = new Date();
@@ -304,15 +374,24 @@ export default function DashboardPage() {
 
     if (!editingAsset) return;
 
-    const parsedQuantity = parseQuantity(assetForm.quantity);
-    if (!assetForm.quantity.trim() || Number.isNaN(parsedQuantity) || parsedQuantity < 0) return;
+    const rawQty = assetForm.quantity.trim();
+    const parsedQuantity = parseQuantity(rawQty);
+    if (!rawQty || Number.isNaN(parsedQuantity) || parsedQuantity < 0) return;
+
+    const localQty = loadLocalQuantities();
+    localQty[editingAsset.symbol] = rawQty;
+    saveLocalQuantities(localQty);
+
+    setAssets((current) =>
+      current.map((a) =>
+        a.symbol === editingAsset.symbol ? { ...a, quantity: rawQty } : a
+      )
+    );
 
     try {
-      await updateAssetQuantity(editingAsset.symbol, assetForm.quantity.trim());
-      const assts = await fetchAssets();
-      setAssets(assts);
+      await updateAssetQuantity(editingAsset.symbol, rawQty);
     } catch {
-      // silent fail
+      // silent fail - local is saved
     }
 
     closeAssetEditor();
@@ -331,18 +410,29 @@ export default function DashboardPage() {
   async function handleNewAssetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!newAssetForm.symbol.trim() || !newAssetForm.name.trim()) return;
+    const symbol = newAssetForm.symbol.trim().toUpperCase();
+    const name = newAssetForm.name.trim();
+    if (!symbol || !name) return;
+
+    const rawQty = newAssetForm.quantity.trim() || "0";
+
+    const localQty = loadLocalQuantities();
+    localQty[symbol] = rawQty;
+    saveLocalQuantities(localQty);
+
+    const newAsset: DashboardAsset = {
+      symbol,
+      name,
+      quantity: rawQty,
+      value: "$0.00",
+      change: "0.0%",
+    };
+    setAssets((current) => [...current, newAsset]);
 
     try {
-      await createAsset({
-        symbol: newAssetForm.symbol.trim(),
-        name: newAssetForm.name.trim(),
-        quantity: newAssetForm.quantity.trim() || "0",
-      });
-      const assts = await fetchAssets();
-      setAssets(assts);
+      await createAsset({ symbol, name, quantity: rawQty });
     } catch {
-      // silent fail
+      // silent fail - local is saved
     }
 
     closeNewAsset();
@@ -352,10 +442,12 @@ export default function DashboardPage() {
     const previous = assets;
     setAssets((current) => current.filter((a) => a.symbol !== symbol));
 
+    const localQty = loadLocalQuantities();
+    delete localQty[symbol];
+    saveLocalQuantities(localQty);
+
     try {
       await deleteAsset(symbol);
-      const assts = await fetchAssets();
-      setAssets(assts);
     } catch {
       setAssets(previous);
     }
@@ -516,8 +608,25 @@ export default function DashboardPage() {
               <h2 className="text-base font-semibold">Activos manuales</h2>
               <p className="mt-1 text-sm text-subtle">Balances cargados por el usuario</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-sky-400">{formatMoney(financialSummary.investmentValue)}</span>
+              <label className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[10px] text-subtle">
+                <span>ARS</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={arsRate}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (v > 0) {
+                      setArsRate(v);
+                      saveLocalArsRate(v);
+                    }
+                  }}
+                  className="w-14 bg-transparent text-xs text-foreground outline-none"
+                />
+              </label>
               <button
                 type="button"
                 onClick={openNewAsset}
@@ -536,53 +645,55 @@ export default function DashboardPage() {
                   : "Cargando activos…"}
               </p>
             ) : (
-              assets.map((asset) => (
-                <div key={asset.symbol} className="group flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-md bg-background text-sm font-semibold">
-                      {asset.symbol.slice(0, 3)}
+              assets.map((asset) => {
+                const usdValue = getAssetUsdValue(asset, assetPrices);
+                const priceLabel = getAssetPriceLabel(asset, assetPrices);
+                return (
+                  <div key={asset.symbol} className="group flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-md bg-background text-sm font-semibold">
+                        {asset.symbol.slice(0, 3)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{asset.name}</p>
+                        <p className="mt-1 text-xs text-subtle">
+                          {asset.quantity} <span className="text-foreground/60">{asset.symbol}</span>
+                        </p>
+                        <p className="mt-1 text-xs text-emerald-400">
+                          {formatMoney(usdValue)} USD
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-subtle">
+                          {priceLabel}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">{asset.name}</p>
-                      <p className="mt-1 text-xs text-subtle">
-                        {asset.quantity} {asset.symbol}
-                      </p>
-                      <p className="mt-1 text-xs text-subtle">
-                        {getAssetPriceLabel(asset, assetPrices)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-sm font-semibold">{formatMoney(getAssetUsdValue(asset, assetPrices))}</p>
-                      <p
-                        className={cn(
-                          "mt-1 text-xs font-medium",
-                          asset.change.startsWith("+") ? "text-emerald-400" : "text-subtle"
-                        )}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">{formatMoney(usdValue)}</p>
+                        <p className={cn("mt-1 text-xs font-medium", asset.change.startsWith("+") ? "text-emerald-400" : "text-subtle")}>
+                          {asset.change}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openAssetEditor(asset)}
+                        className="grid h-8 w-8 place-items-center rounded-md text-subtle opacity-0 transition hover:bg-sky-500/10 hover:text-sky-400 focus:opacity-100 group-hover:opacity-100"
+                        aria-label={`Editar activo ${asset.name}`}
                       >
-                        {asset.change}
-                      </p>
+                        <Edit className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAsset(asset.symbol)}
+                        className="grid h-8 w-8 place-items-center rounded-md text-subtle opacity-0 transition hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
+                        aria-label={`Eliminar activo ${asset.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => openAssetEditor(asset)}
-                      className="grid h-8 w-8 place-items-center rounded-md text-subtle opacity-0 transition hover:bg-sky-500/10 hover:text-sky-400 focus:opacity-100 group-hover:opacity-100"
-                      aria-label={`Editar activo ${asset.name}`}
-                    >
-                      <Edit className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteAsset(asset.symbol)}
-                      className="grid h-8 w-8 place-items-center rounded-md text-subtle opacity-0 transition hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 group-hover:opacity-100"
-                      aria-label={`Eliminar activo ${asset.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </button>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
