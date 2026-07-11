@@ -69,20 +69,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-7 rounded-md border border-border bg-background p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-subtle">Meta mensual</p>
-        <div className="mt-3 flex items-end justify-between">
-          <div>
-            <p className="text-lg font-semibold">$3,000</p>
-            <p className="text-xs text-subtle">Ahorro objetivo</p>
-          </div>
-          <p className="text-sm font-medium text-emerald-400">72%</p>
-        </div>
-        <div className="mt-3 h-2 rounded-full bg-muted">
-          <div className="h-2 w-[72%] rounded-full bg-emerald-500" />
-        </div>
-      </div>
-
       <nav className="mt-auto space-y-1">
         {secondaryItems.map((item) => (
           <Link

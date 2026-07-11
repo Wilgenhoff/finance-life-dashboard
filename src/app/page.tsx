@@ -133,6 +133,9 @@ export default function DashboardPage() {
   const [arsRate, setArsRate] = useState<number>(1200);
   const [newHabitName, setNewHabitName] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [monthlyGoal, setMonthlyGoal] = useState(3000);
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [editGoalValue, setEditGoalValue] = useState("3000");
 
   useEffect(() => {
     setIsMounted(true);
@@ -219,6 +222,17 @@ export default function DashboardPage() {
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
 
+    const monthlyIncome = transactions
+      .filter((transaction) => {
+        const transactionDate = new Date(`${transaction.date}T00:00:00`);
+        return (
+          transaction.type === "income" &&
+          transactionDate.getMonth() === currentMonth &&
+          transactionDate.getFullYear() === currentYear
+        );
+      })
+      .reduce((total, transaction) => total + transaction.amount, 0);
+
     const totalIncome = transactions
       .filter((transaction) => transaction.type === "income")
       .reduce((total, transaction) => total + transaction.amount, 0);
@@ -234,6 +248,9 @@ export default function DashboardPage() {
       })
       .reduce((total, transaction) => total + Math.abs(transaction.amount), 0);
 
+    const netSavings = monthlyIncome - monthlyExpenses;
+    const goalProgress = monthlyGoal > 0 ? Math.min(Math.max((netSavings / monthlyGoal) * 100, 0), 100) : 0;
+
     const transactionBalance = transactions.reduce((total, transaction) => total + transaction.amount, 0);
     const savingsRate = totalIncome > 0 ? Math.max(((totalIncome - monthlyExpenses) / totalIncome) * 100, 0) : 0;
     const investmentValue = assets.reduce((total, asset) => total + getAssetUsdValue(asset, assetPrices), 0);
@@ -241,7 +258,10 @@ export default function DashboardPage() {
 
     return {
       totalIncome,
+      monthlyIncome,
       monthlyExpenses,
+      netSavings,
+      goalProgress,
       transactionBalance,
       savingsRate,
       investmentValue,
@@ -249,7 +269,7 @@ export default function DashboardPage() {
       expensesBarWidth: `${Math.round((monthlyExpenses / maxPulseValue) * 100)}%`,
       investmentsBarWidth: `${Math.round((investmentValue / maxPulseValue) * 100)}%`,
     };
-  }, [assetPrices, assets, transactions]);
+  }, [assetPrices, assets, transactions, monthlyGoal]);
 
   const totalCompletedDays = useMemo(() => {
     if (habits.length === 0) return 0;
@@ -648,7 +668,8 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-[0.85fr_1.15fr] gap-4">
-        <div className="rounded-md border border-border bg-surface p-5">
+        <div className="space-y-4">
+          <div className="rounded-md border border-border bg-surface p-5">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-md bg-emerald-500/10 text-emerald-400">
               <TrendingUp className="h-5 w-5" aria-hidden="true" />
@@ -689,6 +710,77 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        </div>
+        <div className="rounded-md border border-border bg-surface p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-subtle">Meta mensual</p>
+            <button
+              type="button"
+              onClick={() => {
+                setEditGoalValue(String(monthlyGoal));
+                setIsEditingGoal(true);
+              }}
+              className="grid h-7 w-7 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+              aria-label="Editar meta mensual"
+            >
+              <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="mt-3 flex items-end justify-between">
+            {isEditingGoal ? (
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-semibold">$</span>
+                <input
+                  type="number"
+                  value={editGoalValue}
+                  onChange={(e) => setEditGoalValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setMonthlyGoal(Number(editGoalValue));
+                      setIsEditingGoal(false);
+                    }
+                  }}
+                  className="h-8 w-28 rounded-md border border-border bg-background px-2 text-lg font-semibold text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMonthlyGoal(Number(editGoalValue));
+                    setIsEditingGoal(false);
+                  }}
+                  className="grid h-7 w-7 place-items-center rounded-md text-emerald-400 transition hover:bg-emerald-500/10"
+                  aria-label="Confirmar meta"
+                >
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingGoal(false)}
+                  className="grid h-7 w-7 place-items-center rounded-md text-subtle transition hover:bg-muted hover:text-foreground"
+                  aria-label="Cancelar edición"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ) : (
+              <p className="text-lg font-semibold">{formatMoney(monthlyGoal)}</p>
+            )}
+            <p className="text-sm font-medium text-emerald-400">{Math.round(financialSummary.goalProgress)}%</p>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-muted">
+            <div
+              className="h-2 rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${Math.min(Math.max(financialSummary.goalProgress, 0), 100)}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-subtle">
+            Ahorro neto del mes:{" "}
+            <span className={cn("font-medium", financialSummary.netSavings >= 0 ? "text-emerald-400" : "text-red-400")}>
+              {formatMoney(financialSummary.netSavings)}
+            </span>
+          </p>
+        </div>
         </div>
 
         <div className="rounded-md border border-border bg-surface">
