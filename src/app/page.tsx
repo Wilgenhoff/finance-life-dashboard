@@ -38,6 +38,7 @@ type TransactionForm = {
   amount: string;
   type: TransactionType;
   category: string;
+  date: string;
 };
 
 type AssetForm = {
@@ -66,12 +67,15 @@ const initialHabits: LocalHabit[] = [
 
 const categories = ["Ingreso", "Hogar", "Comida", "Transporte", "Salud", "Educación", "Inversión", "Ocio"];
 
-const initialForm: TransactionForm = {
-  title: "",
-  amount: "",
-  type: "expense",
-  category: "Comida",
-};
+function getInitialForm(): TransactionForm {
+  return {
+    title: "",
+    amount: "",
+    type: "expense" as TransactionType,
+    category: "Comida",
+    date: new Date().toISOString().slice(0, 10),
+  };
+}
 
 const DEFAULT_ASSET_PRICES: AssetPriceMap = {
   BTC: 69263.16,
@@ -117,7 +121,7 @@ export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [form, setForm] = useState<TransactionForm>(initialForm);
+  const [form, setForm] = useState<TransactionForm>(getInitialForm());
   const [transactions, setTransactions] = useState<DashboardTransaction[]>([]);
   const [habits, setHabits] = useState<LocalHabit[]>(initialHabits);
   const [assets, setAssets] = useState<DashboardAsset[]>([]);
@@ -284,7 +288,7 @@ export default function DashboardPage() {
 
   function closeModal() {
     setIsModalOpen(false);
-    setForm(initialForm);
+    setForm(getInitialForm());
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -299,7 +303,7 @@ export default function DashboardPage() {
         amount: parsedAmount,
         type: form.type,
         category: form.category,
-        date: new Date().toISOString().slice(0, 10),
+        date: form.date,
       });
 
       const txns = await fetchTransactions();
@@ -801,20 +805,30 @@ export default function DashboardPage() {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-foreground">Categoría</span>
-                  <select
-                    value={form.category}
-                    onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                    className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-emerald-500"
-                  >
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-sm font-medium text-foreground">Fecha</span>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+                    className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-emerald-500 [color-scheme:dark]"
+                  />
                 </label>
               </div>
+
+              <label className="block">
+                <span className="text-sm font-medium text-foreground">Categoría</span>
+                <select
+                  value={form.category}
+                  onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                  className="mt-2 h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-emerald-500"
+                >
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <div>
                 <span className="text-sm font-medium text-foreground">Tipo</span>
