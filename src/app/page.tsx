@@ -79,6 +79,8 @@ const DEFAULT_ASSET_PRICES: AssetPriceMap = {
   BTC: 69263.16,
   USDT: 1,
   ARS: 1 / 1200,
+  SPY: 755.00,
+  MELI: 1852.00,
 };
 
 function formatCurrency(value: number) {
@@ -207,6 +209,38 @@ export default function DashboardPage() {
         }
       } catch {
         // keep defaults if API fails
+      }
+
+      // Try to fetch live prices for stock/ETF assets
+      try {
+        const stockSymbols = ["SPY", "MELI"];
+        const results = await Promise.allSettled(
+          stockSymbols.map((symbol) =>
+            fetch(
+              `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`,
+              { cache: "no-store" }
+            ).then((r) => r.ok ? r.json() : Promise.reject(new Error("Not OK")))
+          )
+        );
+
+        if (!isActive) return;
+
+        const stockPrices: Record<string, number> = {};
+        results.forEach((result, i) => {
+          if (result.status === "fulfilled") {
+            const data = result.value;
+            const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+            if (price && Number.isFinite(price)) {
+              stockPrices[stockSymbols[i]] = price;
+            }
+          }
+        });
+
+        if (Object.keys(stockPrices).length > 0) {
+          setAssetPrices((current) => ({ ...current, ...stockPrices }));
+        }
+      } catch {
+        // keep hardcoded fallbacks
       }
     }
 
