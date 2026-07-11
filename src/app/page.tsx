@@ -22,11 +22,7 @@ import {
   deleteTransaction,
 } from "@/actions/transactions";
 import type { DashboardTransaction } from "@/actions/transactions";
-import {
-  listHabits as fetchHabits,
-  toggleHabitLog,
-} from "@/actions/habits";
-import type { DashboardHabit } from "@/actions/habits";
+
 import {
   listAssets as fetchAssets,
   updateAssetQuantity,
@@ -55,6 +51,18 @@ type NewAssetForm = {
 };
 
 type AssetPriceMap = Record<string, number>;
+
+type LocalHabit = {
+  name: string;
+  color: string;
+  week: boolean[];
+};
+
+const initialHabits: LocalHabit[] = [
+  { name: "Entrenamiento", color: "#22c55e", week: [false, false, false, false, false, false, false] },
+  { name: "Estudio", color: "#3b82f6", week: [false, false, false, false, false, false, false] },
+  { name: "Meditación", color: "#eab308", week: [false, false, false, false, false, false, false] },
+];
 
 const categories = ["Ingreso", "Hogar", "Comida", "Transporte", "Salud", "Educación", "Inversión", "Ocio"];
 
@@ -111,7 +119,7 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<TransactionForm>(initialForm);
   const [transactions, setTransactions] = useState<DashboardTransaction[]>([]);
-  const [habits, setHabits] = useState<DashboardHabit[]>([]);
+  const [habits, setHabits] = useState<LocalHabit[]>(initialHabits);
   const [assets, setAssets] = useState<DashboardAsset[]>([]);
   const [assetPrices, setAssetPrices] = useState<AssetPriceMap>(DEFAULT_ASSET_PRICES);
   const [editingAsset, setEditingAsset] = useState<DashboardAsset | null>(null);
@@ -119,6 +127,7 @@ export default function DashboardPage() {
   const [isNewAssetOpen, setIsNewAssetOpen] = useState(false);
   const [newAssetForm, setNewAssetForm] = useState<NewAssetForm>({ symbol: "", name: "", quantity: "" });
   const [arsRate, setArsRate] = useState<number>(1200);
+  const [newHabitName, setNewHabitName] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -126,17 +135,14 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [txns, habs, assts] = await Promise.all([
+      const [txns, assts] = await Promise.all([
         fetchTransactions(),
-        fetchHabits(),
         fetchAssets(),
       ]);
       setTransactions(txns);
-      setHabits(habs);
       setAssets(assts);
     } catch {
       setTransactions([]);
-      setHabits([]);
       setAssets([]);
     } finally {
       setHasLoadedInitialData(true);
@@ -240,6 +246,11 @@ export default function DashboardPage() {
     };
   }, [assetPrices, assets, transactions]);
 
+  const totalCompletedDays = useMemo(
+    () => habits.reduce((sum, h) => sum + h.week.filter((d) => d).length, 0),
+    [habits]
+  );
+
   const summaryCards = useMemo(
     () => [
       {
@@ -256,12 +267,12 @@ export default function DashboardPage() {
       },
       {
         label: "Racha de hábitos",
-        value: "12 días",
-        delta: "+3 esta semana",
+        value: `${totalCompletedDays} días`,
+        delta: "Completados esta semana",
         tone: "neutral",
       },
     ],
-    [financialSummary.monthlyExpenses, financialSummary.transactionBalance]
+    [financialSummary.monthlyExpenses, financialSummary.transactionBalance, totalCompletedDays]
   );
 
   const orderedTransactions = useMemo(() => transactions.slice(0, 6), [transactions]);
@@ -381,21 +392,24 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleToggleHabit(name: string, dayIndex: number) {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    const targetDate = new Date(monday);
-    targetDate.setDate(monday.getDate() + dayIndex);
-    const dateStr = targetDate.toISOString().slice(0, 10);
+  function handleToggleHabit(name: string, dayIndex: number) {
+    setHabits((current) =>
+      current.map((h) =>
+        h.name === name
+          ? { ...h, week: h.week.map((d, i) => (i === dayIndex ? !d : d)) }
+          : h
+      )
+    );
+  }
 
-    try {
-      await toggleHabitLog(name, dateStr);
-      const habs = await fetchHabits();
-      setHabits(habs);
-    } catch {
-      // silent fail
-    }
+  function handleAddHabit() {
+    const name = newHabitName.trim();
+    if (!name) return;
+    const colors = ["#a855f7", "#f97316", "#06b6d4", "#ec4899", "#84cc16"];
+    const usedColors = habits.map((h) => h.color);
+    const color = colors.find((c) => !usedColors.includes(c)) ?? "#6366f1";
+    setHabits((current) => [...current, { name, color, week: [false, false, false, false, false, false, false] }]);
+    setNewHabitName("");
   }
 
   const today = new Date();
@@ -670,13 +684,31 @@ export default function DashboardPage() {
 
         <div className="rounded-md border border-border bg-surface">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
-            <div>
-              <h2 className="text-base font-semibold">Hábitos de la semana</h2>
-              <p className="mt-1 text-sm text-subtle">Checklist diario para mantener racha</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="text-base font-semibold">Hábitos de la semana</h2>
+                <p className="mt-1 text-sm text-subtle">Checklist diario para mantener racha</p>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1">
+                <input
+                  value={newHabitName}
+                  onChange={(e) => setNewHabitName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddHabit(); }}
+                  placeholder="Nuevo hábito"
+                  className="w-24 bg-transparent text-xs text-foreground outline-none placeholder:text-subtle"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddHabit}
+                  className="grid h-5 w-5 place-items-center rounded text-subtle transition hover:bg-muted hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-emerald-400">
               <CircleDollarSign className="h-4 w-4" aria-hidden="true" />
-              12 días
+              {totalCompletedDays} días
             </div>
           </div>
           <div className="p-5">
@@ -687,37 +719,29 @@ export default function DashboardPage() {
               ))}
             </div>
             <div className="space-y-3">
-              {habits.length === 0 ? (
-                <p className="py-4 text-center text-sm text-subtle">
-                  {hasLoadedInitialData
-                    ? "No hay hábitos configurados."
-                    : "Cargando hábitos…"}
-                </p>
-              ) : (
-                habits.map((habit) => (
-                  <div key={habit.name} className="grid grid-cols-[170px_repeat(7,42px)] items-center gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: habit.color }} />
-                      {habit.name}
-                    </div>
-                    {habit.week.map((done, index) => (
-                      <button
-                        type="button"
-                        key={`${habit.name}-${index}`}
-                        onClick={() => handleToggleHabit(habit.name, index)}
-                        className={cn(
-                          "grid h-9 w-9 place-items-center rounded-md border text-xs transition",
-                          done
-                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                            : "border-border bg-background text-subtle hover:border-emerald-500/30 hover:bg-emerald-500/5"
-                        )}
-                      >
-                        {done ? <Check className="h-4 w-4" aria-hidden="true" /> : ""}
-                      </button>
-                    ))}
+              {habits.map((habit) => (
+                <div key={habit.name} className="grid grid-cols-[170px_repeat(7,42px)] items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: habit.color }} />
+                    {habit.name}
                   </div>
-                ))
-              )}
+                  {habit.week.map((done, index) => (
+                    <button
+                      type="button"
+                      key={`${habit.name}-${index}`}
+                      onClick={() => handleToggleHabit(habit.name, index)}
+                      className={cn(
+                        "grid h-9 w-9 place-items-center rounded-md border text-xs transition",
+                        done
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                          : "border-border bg-background text-subtle hover:border-emerald-500/30 hover:bg-emerald-500/5"
+                      )}
+                    >
+                      {done ? <Check className="h-4 w-4" aria-hidden="true" /> : ""}
+                    </button>
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         </div>
